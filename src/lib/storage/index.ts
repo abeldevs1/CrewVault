@@ -7,13 +7,111 @@ export interface R2Object {
   etag: string;
   uploaded: Date;
   httpMetadata?: Record<string, string>;
-  body?: ReadableStream | ArrayBuffer;
+  body?: ReadableStream | ArrayBuffer | Buffer;
 }
 
 export interface R2Bucket {
-  put(key: string, value: ReadableStream | ArrayBuffer | string, options?: any): Promise<R2Object>;
+  put(key: string, value: ReadableStream | ArrayBuffer | string | Buffer, options?: any): Promise<R2Object>;
   get(key: string): Promise<R2Object | null>;
   delete(key: string): Promise<void>;
+}
+
+/**
+ * Fallback D1-backed storage when Cloudflare R2 is not enabled (e.g. no credit card on account).
+ * Stores files as base64 in the `file_blobs` table in D1 SQLite.
+ */
+export class D1StorageBucket implements R2Bucket {
+  private dbPromise: Promise<D1Database>;
+
+  constructor(db?: D1Database) {
+    if (db) {
+      this.dbPromise = Promise.resolve(db);
+    } else {
+      this.dbPromise = import("../db").then((m) => m.getDB());
+    }
+  }
+
+  async put(key: string, value: ReadableStream | ArrayBuffer | string | Buffer, options?: any): Promise<R2Object> {
+    const db = await this.dbPromise;
+    let base64Data: string;
+    let size = 0;
+
+    if (typeof value === "string") {
+      base64Data = Buffer.from(value, "utf-8").toString("base64");
+      size = Buffer.byteLength(value, "utf-8");
+    } else if (Buffer.isBuffer(value)) {
+      base64Data = value.toString("base64");
+      size = value.byteLength;
+    } else if (value instanceof ArrayBuffer) {
+      const buf = Buffer.from(value);
+      base64Data = buf.toString("base64");
+      size = buf.byteLength;
+    } else if (value && typeof (value as any).getReader === "function") {
+      const reader = (value as ReadableStream).getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+        if (chunk) chunks.push(chunk);
+      }
+      const combined = Buffer.concat(chunks);
+      base64Data = combined.toString("base64");
+      size = combined.byteLength;
+    } else {
+      base64Data = "";
+      size = 0;
+    }
+
+    const mime = options?.httpMetadata?.contentType || "application/octet-stream";
+
+    await db
+      .prepare(
+        "INSERT INTO file_blobs (key, data, mime_type, size) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, mime_type = excluded.mime_type, size = excluded.size"
+      )
+      .bind(key, base64Data, mime, size)
+      .run();
+
+    const buf = Buffer.from(base64Data, "base64");
+    return {
+      key,
+      size,
+      etag: `d1-${Date.now()}`,
+      uploaded: new Date(),
+      httpMetadata: { contentType: mime },
+      body: buf,
+      text: async () => buf.toString("utf-8"),
+      arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      blob: async () => new Blob([buf], { type: mime }),
+    } as any;
+  }
+
+  async get(key: string): Promise<R2Object | null> {
+    const db = await this.dbPromise;
+    const row = await db
+      .prepare("SELECT data, mime_type, size, created_at FROM file_blobs WHERE key = ?")
+      .bind(key)
+      .first<{ data: string; mime_type: string; size: number; created_at: string }>();
+
+    if (!row || !row.data) return null;
+
+    const buf = Buffer.from(row.data, "base64");
+    return {
+      key,
+      size: row.size || buf.byteLength,
+      etag: "d1",
+      uploaded: new Date(row.created_at || Date.now()),
+      httpMetadata: { contentType: row.mime_type || "application/octet-stream" },
+      body: buf,
+      text: async () => buf.toString("utf-8"),
+      arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      blob: async () => new Blob([buf], { type: row.mime_type || "application/octet-stream" }),
+    } as any;
+  }
+
+  async delete(key: string): Promise<void> {
+    const db = await this.dbPromise;
+    await db.prepare("DELETE FROM file_blobs WHERE key = ?").bind(key).run();
+  }
 }
 
 export async function getR2Bucket(): Promise<R2Bucket> {
@@ -21,7 +119,7 @@ export async function getR2Bucket(): Promise<R2Bucket> {
   if (bindings.STORAGE) {
     return bindings.STORAGE;
   }
-  throw new Error("Cloudflare R2 Bucket binding 'STORAGE' not found in environment.");
+  return new D1StorageBucket(bindings.DB);
 }
 
 export function buildR2OriginalKey(materialId: string, versionId: string, filename: string): string {

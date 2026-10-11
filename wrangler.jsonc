@@ -12,13 +12,7 @@
     {
       "binding": "DB",
       "database_name": "crew-vault-db",
-      "database_id": "local-crew-vault-d1"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "STORAGE",
-      "bucket_name": "crew-vault-materials"
+      "database_id": "a12d70c8-51ad-40c4-93fd-6d2723b1c849"
     }
   ]
 }

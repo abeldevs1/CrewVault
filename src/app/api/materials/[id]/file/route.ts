@@ -69,17 +69,48 @@ export async function GET(
       }
     }
 
+    const disposition = download ? "attachment" : "inline";
+
     if (type === "markdown") {
-      targetKey = material.r2_key_markdown;
       contentType = "text/markdown; charset=utf-8";
       filename = `${material.title}.md`;
+      if (material.extracted_markdown) {
+        return new Response(material.extracted_markdown, {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename)}"`,
+            "Cache-Control": "private, max-age=3600",
+          },
+        });
+      }
+      targetKey = material.r2_key_markdown;
     } else if (type === "text") {
-      targetKey = material.r2_key_text;
       contentType = "text/plain; charset=utf-8";
       filename = `${material.title}.txt`;
+      if (material.extracted_text) {
+        return new Response(material.extracted_text, {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename)}"`,
+            "Cache-Control": "private, max-age=3600",
+          },
+        });
+      }
+      targetKey = material.r2_key_text;
     }
 
     if (!targetKey) {
+      if (material.extracted_text) {
+        return new Response(material.extracted_text, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename || material.title + '.txt')}"`,
+          },
+        });
+      }
       return new NextResponse("File record has no storage key", { status: 404 });
     }
 
@@ -87,10 +118,17 @@ export async function GET(
     const object = await bucket.get(targetKey);
 
     if (!object || !object.body) {
+      if (material.extracted_text || material.extracted_markdown) {
+        return new Response(material.extracted_markdown || material.extracted_text, {
+          status: 200,
+          headers: {
+            "Content-Type": material.extracted_markdown ? "text/markdown; charset=utf-8" : "text/plain; charset=utf-8",
+            "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename || material.title + '.txt')}"`,
+          },
+        });
+      }
       return new NextResponse("File object not found in storage bucket", { status: 404 });
     }
-
-    const disposition = download ? "attachment" : "inline";
 
     return new Response(object.body as any, {
       status: 200,
