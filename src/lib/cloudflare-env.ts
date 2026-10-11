@@ -31,28 +31,33 @@ export async function getCloudflareBindings(): Promise<CloudflareBindings> {
   }
 
   // 3. Fallback for local development, test runners, and seed scripts using persistent Wrangler state
-  if (typeof window === "undefined") {
+  if (typeof window === "undefined" && process.env.NODE_ENV !== "production") {
     if (!localProxyPromise) {
       localProxyPromise = (async () => {
-        const path = await import("path");
-        const cwd = process.cwd();
-        process.env.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(cwd, ".config");
-        process.env.WRANGLER_LOG_PATH = process.env.WRANGLER_LOG_PATH || path.join(cwd, ".wrangler/logs");
+        try {
+          const path = await import("path");
+          const cwd = process.cwd();
+          process.env.XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME || path.join(cwd, ".config");
+          process.env.WRANGLER_LOG_PATH = process.env.WRANGLER_LOG_PATH || path.join(cwd, ".wrangler/logs");
 
-        const { getPlatformProxy } = await import("wrangler");
-        const proxy = await getPlatformProxy<any>({
-          configPath: "wrangler.jsonc",
-          persist: { path: ".wrangler/state/v3" },
-        });
+          const modName = "wrangler";
+          const wranglerMod = await import(/* webpackIgnore: true */ modName);
+          const proxy = await wranglerMod.getPlatformProxy({
+            configPath: "wrangler.jsonc",
+            persist: { path: ".wrangler/state/v3" },
+          });
 
-        const bindings: CloudflareBindings = {
-          DB: proxy.env.DB as D1Database,
-          STORAGE: proxy.env.STORAGE as R2Bucket,
-          ASSETS: proxy.env.ASSETS,
-        };
+          const bindings: CloudflareBindings = {
+            DB: proxy.env.DB as D1Database,
+            STORAGE: proxy.env.STORAGE as R2Bucket,
+            ASSETS: proxy.env.ASSETS,
+          };
 
-        (globalThis as any).__CF_BINDINGS__ = bindings;
-        return bindings;
+          (globalThis as any).__CF_BINDINGS__ = bindings;
+          return bindings;
+        } catch {
+          return null as any;
+        }
       })();
     }
 

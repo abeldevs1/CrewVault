@@ -2,11 +2,16 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "crew-vault",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2024-09-23",
+  "compatibility_date": "2025-02-14",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+  "alias": {
+    "sqlite": "./src/lib/empty-mock.js",
+    "node:sqlite": "./src/lib/empty-mock.js",
+    "wrangler": "./src/lib/empty-mock.js"
   },
   "d1_databases": [
     {
