@@ -1079,9 +1079,9 @@ Return a valid JSON object matching:
   const remainingCount = totalItemsCount - masteredCount;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* ── TOP HEADER BAR ── */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-indigo-500/30 selection:text-indigo-200 pb-20 lg:pb-0">
+      {/* ── TOP SUB-BAR ── */}
+      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={returnToLibrary}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -1543,12 +1543,29 @@ Return a valid JSON object matching:
                   </div>
                 )}
 
-                {/* Invisible input listener */}
+                {/* Mobile Touch Keyboard Trigger */}
+                <div className="sm:hidden mb-3 p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-indigo-300">
+                    📱 Tap button to summon keyboard
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hiddenInputRef.current?.focus();
+                    }}
+                    className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow active:scale-95"
+                  >
+                    Open Keyboard
+                  </button>
+                </div>
+
+                {/* Mobile and desktop input listener */}
                 <textarea
                   ref={hiddenInputRef}
                   onChange={handleTypingInput}
                   onKeyDown={handleInputKeyDown}
-                  className="opacity-0 absolute top-0 left-0 w-1 h-1 pointer-events-none"
+                  className="opacity-0 fixed top-0 left-0 w-8 h-8 z-0 cursor-text"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"

@@ -16,6 +16,11 @@ export async function GET(request: Request) {
     `;
     const params: any[] = [currentUser.id];
 
+    // Regular users must NOT be able to search or see admins
+    if (currentUser.role !== "ADMIN") {
+      sql += ` AND role != 'ADMIN'`;
+    }
+
     if (query.trim()) {
       sql += ` AND (full_name LIKE ? OR email LIKE ? OR airline LIKE ?)`;
       const term = `%${query.trim()}%`;

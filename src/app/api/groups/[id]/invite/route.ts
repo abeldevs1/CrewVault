@@ -64,6 +64,14 @@ export async function POST(
       );
     }
 
+    // Regular users cannot see or invite administrators to peer study groups
+    if (!isAdmin && targetUser.role === "ADMIN") {
+      return NextResponse.json(
+        { error: "Administrative staff cannot be added to peer study groups." },
+        { status: 403 }
+      );
+    }
+
     // Check if already a member
     const existingMember = await db
       .prepare(`SELECT * FROM group_memberships WHERE group_id = ? AND user_id = ?`)

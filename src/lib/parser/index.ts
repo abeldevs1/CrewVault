@@ -1,6 +1,56 @@
 import mammoth from "mammoth";
 import JSZip from "jszip";
+import zlib from "node:zlib";
 import { performVisionOcr } from "@/lib/ai/openrouter";
+
+/**
+ * Validates that an extracted string is legible human text
+ * and not binary garbage, corrupt stream fragments, or font CID noise.
+ */
+export function isLegibleHumanText(text: string): boolean {
+  if (!text || text.trim().length === 0) return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 8) return false;
+
+  let printableAscii = 0;
+  let nonPrintableOrHighAscii = 0;
+  let letterOrDigit = 0;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    // Standard whitespace characters
+    if (code === 9 || code === 10 || code === 13) continue;
+
+    // Standard ASCII printable characters (32 to 126)
+    if (code >= 32 && code <= 126) {
+      printableAscii++;
+      if (
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        (code >= 48 && code <= 57)
+      ) {
+        letterOrDigit++;
+      }
+    } else {
+      nonPrintableOrHighAscii++;
+    }
+  }
+
+  const totalChars = printableAscii + nonPrintableOrHighAscii;
+  if (totalChars === 0) return false;
+
+  // If >6% of characters are non-ASCII or corrupt binary control bytes, reject
+  if (nonPrintableOrHighAscii / totalChars > 0.06) {
+    return false;
+  }
+
+  // If letters/digits make up less than 35% of characters, reject as noise
+  if (letterOrDigit / totalChars < 0.35) {
+    return false;
+  }
+
+  return true;
+}
 
 export interface ProcessingResult {
   extracted_text: string;
@@ -133,27 +183,29 @@ export async function processUploadedFile(
         } catch (_) {}
       }
 
-      if (!extracted || extracted.trim().length === 0) {
+      if (!extracted || !isLegibleHumanText(extracted)) {
         extracted = extractPdfRawStreams(buffer);
       }
 
-      rawText = cleanPdfExtractionArtifacts(extracted);
+      if (extracted && isLegibleHumanText(extracted)) {
+        rawText = cleanPdfExtractionArtifacts(extracted);
+      }
 
-      // If PDF has no digital text (e.g. scanned PDF), explain cleanly
-      if (rawText.trim().length < 30) {
-        rawText = `## Scanned PDF Document: ${filename}\n\nThis PDF contains scanned pages or graphical diagrams. The document has been securely preserved and can be viewed directly in the In-Site PDF Viewer.`;
+      // If PDF has no digital readable text (e.g. scanned PDF or graphical manual), explain cleanly
+      if (!rawText || rawText.trim().length < 25 || !isLegibleHumanText(rawText)) {
+        rawText = `## Training Document: ${filename}\n\nThis PDF contains visual diagrams, schematics, or scanned instructional pages. The full original file is preserved and can be viewed directly in the In-Site PDF Viewer and downloaded.`;
       }
     } catch (e: any) {
       console.warn("PDF parsing exception, trying raw stream recovery:", e);
       try {
         const rawRecovered = extractPdfRawStreams(buffer);
-        if (rawRecovered && rawRecovered.trim().length > 30) {
+        if (rawRecovered && isLegibleHumanText(rawRecovered) && rawRecovered.trim().length > 25) {
           rawText = cleanPdfExtractionArtifacts(rawRecovered);
         } else {
-          rawText = `## PDF Document: ${filename}\n\nDocument preserved for In-Site PDF Viewer and Download.`;
+          rawText = `## Training Document: ${filename}\n\nThis PDF contains visual diagrams, schematics, or scanned instructional pages. The full original file is preserved and can be viewed directly in the In-Site PDF Viewer and downloaded.`;
         }
       } catch (_) {
-        rawText = `## PDF Document: ${filename}\n\nDocument preserved for In-Site PDF Viewer and Download.`;
+        rawText = `## Training Document: ${filename}\n\nThis PDF contains visual diagrams, schematics, or scanned instructional pages. The full original file is preserved and can be viewed directly in the In-Site PDF Viewer and downloaded.`;
       }
     }
   }
@@ -317,6 +369,11 @@ function cleanPdfExtractionArtifacts(text: string): string {
       continue;
     }
 
+    // Filter out binary corruption lines or font table junk
+    if (trimmed.length > 5 && !isLegibleHumanText(trimmed)) {
+      continue;
+    }
+
     const isFontTableJunk = /^(\d{1,4}\s+){4,}\d{1,4}$/.test(trimmed);
     if (isFontTableJunk) continue;
 
@@ -370,30 +427,75 @@ export function normalizeToMarkdown(text: string, title: string): string {
 
 function extractPdfRawStreams(buffer: Buffer): string {
   try {
-    const str = buffer.toString("latin1");
     const textChunks: string[] = [];
+    const bufStr = buffer.toString("latin1");
 
-    // Match Tj text operators: (some text) Tj
-    const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
-    let m;
-    while ((m = tjRegex.exec(str)) !== null) {
-      const val = m[1].trim();
-      if (val.length > 0 && !/^[\x00-\x1F\x7F]+$/.test(val)) {
-        textChunks.push(val);
+    // Scan for PDF stream objects
+    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let match;
+
+    while ((match = streamRegex.exec(bufStr)) !== null) {
+      const streamStart = match.index + match[0].indexOf("\n") + 1;
+      const streamContent = match[1];
+      const streamBuf = buffer.subarray(streamStart, streamStart + streamContent.length);
+
+      const precedingDict = bufStr.substring(Math.max(0, match.index - 500), match.index);
+      let decompressed: string = "";
+
+      // If compressed with FlateDecode, inflate
+      if (precedingDict.includes("/FlateDecode") || precedingDict.includes("/Flate")) {
+        try {
+          const inflated = zlib.inflateSync(streamBuf);
+          decompressed = inflated.toString("utf-8");
+        } catch (_) {
+          try {
+            const inflatedRaw = zlib.inflateRawSync(streamBuf);
+            decompressed = inflatedRaw.toString("utf-8");
+          } catch (_) {
+            decompressed = "";
+          }
+        }
+      } else {
+        decompressed = streamBuf.toString("utf-8");
+      }
+
+      if (!decompressed) continue;
+
+      // Extract Tj string operators: (some text) Tj
+      const tjRegex = /\(([^)]+)\)\s*(?:Tj|'|")/g;
+      let tjMatch;
+      while ((tjMatch = tjRegex.exec(decompressed)) !== null) {
+        const rawToken = tjMatch[1]
+          .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+          .replace(/\\([()nrtbf\\])/g, (_, c) => c === "n" ? "\n" : c === "t" ? "\t" : c);
+        const token = rawToken.trim();
+        if (token.length > 2 && isLegibleHumanText(token)) {
+          textChunks.push(token);
+        }
+      }
+
+      // Extract TJ array operators: [(item1) 123 (item2)] TJ
+      const tjArrayRegex = /\[([^\]]+)\]\s*TJ/gi;
+      let tjArrMatch;
+      while ((tjArrMatch = tjArrayRegex.exec(decompressed)) !== null) {
+        const inner = tjArrMatch[1];
+        const subMatches = inner.match(/\(([^)]+)\)/g);
+        if (subMatches) {
+          const lineTokens = subMatches
+            .map((s) => s.slice(1, -1).trim())
+            .filter((s) => s.length > 0 && isLegibleHumanText(s));
+          if (lineTokens.length > 0) {
+            textChunks.push(lineTokens.join(" "));
+          }
+        }
       }
     }
 
-    // Match TJ array operators: [(item1) 123 (item2)] TJ
-    const tjArrayRegex = /\[([^\]]+)\]\s*TJ/gi;
-    while ((m = tjArrayRegex.exec(str)) !== null) {
-      const inner = m[1];
-      const subMatches = inner.match(/\(([^)]+)\)/g);
-      if (subMatches) {
-        textChunks.push(subMatches.map((s) => s.slice(1, -1).trim()).filter(Boolean).join(" "));
-      }
+    const fullResult = textChunks.join("\n").trim();
+    if (!isLegibleHumanText(fullResult) || fullResult.split(/\s+/).length < 10) {
+      return "";
     }
-
-    return textChunks.join("\n");
+    return fullResult;
   } catch (_) {
     return "";
   }

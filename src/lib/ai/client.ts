@@ -267,15 +267,26 @@ Return strictly JSON with key "questions" containing an array of objects:
     materialId?: string,
     versionId?: string
   ): Promise<Partial<Question>[]> {
-    const prompt = `You are a senior airline cabin crew examiner. Generate exactly ${count} multiple-choice examination questions based STRICTLY on the study material provided below.
+    // Strip synthetic headings, bundle indicators, and file metadata from the text passed to AI
+    const cleanedText = text
+      .replace(/^#+\s*(?:Section\s*\d+:|Document|File).*$/gim, "")
+      .replace(/\*\((?:Multi-page bundle|Uploaded file|Binary file).*?\)\*/gi, "")
+      .replace(/^##\s+.*?\.(?:pdf|pptx|docx|txt)/gim, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    const prompt = `You are a senior airline cabin crew examiner and ground instructor. Generate exactly ${count} multiple-choice examination questions based STRICTLY on the operational aviation and cabin crew subject matter in the study material provided below.
 Difficulty level: ${difficulty}.
-Requirements:
+
+CRITICAL EXAMINATION RULES:
 1. Every question must have exactly 4 plausible options (A, B, C, D).
-2. The correct answer must be procedurally accurate based on the text.
-3. Include an informative explanation citing the relevant safety or service rule.
+2. The questions MUST test real operational cabin crew subject matter: safety protocols, passenger service procedures, in-flight entertainment (IFE) operation, emergency equipment, aviation regulations, or first aid.
+3. ABSOLUTELY FORBIDDEN: You must NEVER generate questions about file names, document file extensions (.pdf, .pptx), file numbering conventions (e.g. '0 CCV-SV101', 'Section 14'), multi-page bundles, document layout, or upload metadata. Any question referencing file names or numbering conventions is completely invalid.
+4. The correct answer must be procedurally accurate based on the text.
+5. Include an informative explanation citing the relevant cabin safety or service rule.
 
 Study Material:
-${text.substring(0, 10000)}
+${(cleanedText || text).substring(0, 10000)}
 
 Return strictly JSON with key "questions" containing an array of objects:
 {
@@ -363,10 +374,15 @@ Return strictly JSON with key "questions" containing an array of objects:
       }
 
       // 2. Synthesize questions from key procedural paragraphs, steps, and specifications
-      const lines = text
+      const lines = (cleanedText || text)
         .split(/\r?\n/)
         .map((l) => l.trim())
-        .filter((l) => l.length > 25 && !l.startsWith("#"));
+        .filter((l) => {
+          if (l.length < 25) return false;
+          if (l.startsWith("#")) return false;
+          if (/\b(?:bundle|files?|section\s*\d+|CCV-|\.pdf|\.pptx|\.docx)\b/i.test(l)) return false;
+          return true;
+        });
 
       const synthesized: Partial<Question>[] = [];
       for (let i = 0; i < lines.length && synthesized.length < count; i++) {
@@ -376,6 +392,7 @@ Return strictly JSON with key "questions" containing an array of objects:
         const colonSplit = line.split(/[:\-–—]\s+/);
         if (colonSplit.length >= 2 && colonSplit[0].length < 60) {
           const subjectHeader = colonSplit[0].replace(/^[-*•\d.]+\s*/, "").trim();
+          if (/\b(?:bundle|files?|section|CCV|\.pdf|\.pptx)\b/i.test(subjectHeader)) continue;
           const detail = colonSplit.slice(1).join(" : ").trim();
 
           synthesized.push({

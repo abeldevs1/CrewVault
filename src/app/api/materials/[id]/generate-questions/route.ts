@@ -44,9 +44,10 @@ export async function POST(
       } catch (e) {}
     }
 
-    if (!contentText || contentText.trim().length < 30) {
+    const { isLegibleHumanText } = await import("@/lib/parser");
+    if (!contentText || contentText.trim().length < 30 || !isLegibleHumanText(contentText)) {
       return NextResponse.json(
-        { error: "Insufficient readable text in this document to synthesize questions." },
+        { error: "Insufficient readable text in this document to synthesize questions. If this is a scanned diagram or graphical chart, please review using the In-Site Document Viewer." },
         { status: 400 }
       );
     }

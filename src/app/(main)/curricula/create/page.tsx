@@ -64,6 +64,7 @@ export default function CreateCurriculumPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [suggestedTitle, setSuggestedTitle] = useState("");
 
   const aircraftGroups = getAircraftGrouped();
 
@@ -83,6 +84,50 @@ export default function CreateCurriculumPage() {
       })
       .catch(console.error);
   }, []);
+
+  // Auto-suggest curriculum title based on attached materials
+  useEffect(() => {
+    const allMatIds = modules.flatMap((m) => m.material_ids);
+    const uniqueIds = [...new Set(allMatIds)];
+    if (uniqueIds.length === 0) {
+      setSuggestedTitle("");
+      return;
+    }
+
+    const selectedMats = availableMaterials.filter((m: any) => uniqueIds.includes(m.id));
+    if (selectedMats.length === 0) {
+      setSuggestedTitle("");
+      return;
+    }
+
+    const subjects = new Set<string>();
+    const keywords = new Set<string>();
+    const stopWords = ["the", "a", "an", "and", "or", "of", "for", "in", "on", "to", "with", "by", "from"];
+    selectedMats.forEach((m: any) => {
+      if (m.subject) subjects.add(m.subject);
+      m.title.split(/[\s,]+/).forEach((w: string) => {
+        const clean = w.replace(/[^a-zA-Z0-9]/g, "");
+        if (clean.length > 2 && !stopWords.includes(clean.toLowerCase())) {
+          keywords.add(clean);
+        }
+      });
+    });
+
+    let suggestion = "";
+    const subjectArr = [...subjects];
+    if (subjectArr.length > 0) {
+      suggestion = subjectArr.slice(0, 3).join(" & ") + " Training";
+    } else {
+      const kwArr = [...keywords];
+      suggestion = kwArr.slice(0, 4).join(" ") + " Curriculum";
+    }
+
+    if (aircraft && !aircraft.includes("General")) {
+      suggestion += ` — ${aircraft}`;
+    }
+
+    setSuggestedTitle(suggestion);
+  }, [modules, availableMaterials, aircraft]);
 
   const addModule = () => {
     const nextNum = modules.length + 1;
@@ -209,17 +254,34 @@ export default function CreateCurriculumPage() {
 
           <div className="space-y-4 pt-2">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Curriculum Title *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Curriculum Title *
+                </label>
+                {suggestedTitle && (
+                  <button
+                    type="button"
+                    onClick={() => setTitle(suggestedTitle)}
+                    className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Use Suggested Title
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 required
-                placeholder="e.g. Boeing 787-9 Initial Conversion Academy"
+                placeholder={suggestedTitle || "e.g. Boeing 787-9 Initial Conversion Academy"}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs md:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-all"
               />
+              {suggestedTitle && !title && (
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Suggested: <span className="text-amber-400/70 font-medium">{suggestedTitle}</span>
+                </p>
+              )}
             </div>
 
             <div>

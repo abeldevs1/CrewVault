@@ -47,10 +47,24 @@ export async function GET() {
       )
       .all<any>();
 
+    // Active Logged-in Sessions
+    const { results: activeSessions } = await db
+      .prepare(
+        `SELECT s.id as session_id, s.user_id, s.created_at as logged_in_at, s.expires_at,
+                u.full_name, u.email, u.role, u.airline
+         FROM sessions s
+         JOIN users u ON s.user_id = u.id
+         WHERE s.expires_at > CURRENT_TIMESTAMP
+         ORDER BY s.created_at DESC
+         LIMIT 50`
+      )
+      .all<any>();
+
     return NextResponse.json({
       success: true,
       stats: {
         total_users: totalUsers?.count || 0,
+        active_sessions_count: activeSessions?.length || 0,
         total_materials: totalMaterials?.count || 0,
         total_exams: totalExams?.count || 0,
         total_questions: totalQuestions?.count || 0,
@@ -60,6 +74,7 @@ export async function GET() {
         storage_limit_bytes: 10 * 1024 * 1024 * 1024, // 10 GB limit
       },
       audit_logs: auditLogs,
+      active_sessions: activeSessions,
       users: usersList,
       exams: examsList,
     });

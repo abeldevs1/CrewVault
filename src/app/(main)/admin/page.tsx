@@ -43,6 +43,11 @@ export default function AdminConsolePage() {
   // Exam Action State
   const [examActionLoading, setExamActionLoading] = useState<string | null>(null);
 
+  // User Role & Session Action State
+  const [roleActionLoading, setRoleActionLoading] = useState<string | null>(null);
+  const [roleSuccessMsg, setRoleSuccessMsg] = useState("");
+  const [sessionActionLoading, setSessionActionLoading] = useState<string | null>(null);
+
   // System Wipe Danger Zone State
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [confirmCodeInput, setConfirmCodeInput] = useState("");
@@ -147,6 +152,50 @@ export default function AdminConsolePage() {
     }
   };
 
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    setRoleActionLoading(userId);
+    setRoleSuccessMsg("");
+    try {
+      const res = await fetch("/api/admin/users/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, role: newRole }),
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        setRoleSuccessMsg(resData.message || `Role updated to ${newRole}`);
+        fetchAdminData();
+        setTimeout(() => setRoleSuccessMsg(""), 4000);
+      } else {
+        alert(resData.error || "Failed to update user role");
+      }
+    } catch (e: any) {
+      alert(e.message || "Error updating role");
+    } finally {
+      setRoleActionLoading(null);
+    }
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    if (!confirm("Are you sure you want to terminate this user session? The user will be signed out immediately.")) {
+      return;
+    }
+    setSessionActionLoading(sessionId);
+    try {
+      const res = await fetch(`/api/admin/sessions/${sessionId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchAdminData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to terminate session");
+      }
+    } catch (e: any) {
+      alert(e.message || "Error terminating session");
+    } finally {
+      setSessionActionLoading(null);
+    }
+  };
+
   const handleExecuteWipe = async (e: React.FormEvent) => {
     e.preventDefault();
     setWipeLoading(true);
@@ -188,7 +237,7 @@ export default function AdminConsolePage() {
     return <div className="text-center py-20 text-xs text-slate-400">Admin access restricted.</div>;
   }
 
-  const { stats, users, audit_logs, exams = [] } = data;
+  const { stats, users = [], audit_logs = [], exams = [], active_sessions = [] } = data;
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-20">
@@ -201,7 +250,7 @@ export default function AdminConsolePage() {
           </div>
           <h1 className="text-2xl font-extrabold text-white">Administrator Dashboard</h1>
           <p className="text-xs text-slate-400">
-            System overview, exam management, feature flags, storage governance, and security audit logs.
+            System overview, active sessions, trainee role governance, exam management, and security audit logs.
           </p>
         </div>
 
@@ -225,10 +274,17 @@ export default function AdminConsolePage() {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <div className="glass-card p-5 rounded-2xl border border-slate-800">
           <div className="text-xs text-slate-400">Total Users</div>
           <div className="text-2xl font-extrabold text-sky-400 mt-1">{stats.total_users}</div>
+        </div>
+        <div className="glass-card p-5 rounded-2xl border border-slate-800">
+          <div className="text-xs text-slate-400">Logged-In Now</div>
+          <div className="text-2xl font-extrabold text-emerald-400 mt-1 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            {active_sessions.length}
+          </div>
         </div>
         <div className="glass-card p-5 rounded-2xl border border-slate-800">
           <div className="text-xs text-slate-400">Total Materials</div>
@@ -244,6 +300,207 @@ export default function AdminConsolePage() {
             {stats.pending_moderation + stats.pending_questions}
           </div>
         </div>
+      </div>
+
+      {/* ── 0A. ACTIVE LOGGED-IN USERS & LIVE SESSIONS ── */}
+      <div className="glass-card p-6 rounded-3xl border border-emerald-500/30 bg-emerald-950/10 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              Active Logged-In Users ({active_sessions.length})
+            </h2>
+            <p className="text-xs text-slate-400">
+              Real-time active student & instructor sessions authenticated on CrewVault.
+            </p>
+          </div>
+        </div>
+
+        {active_sessions.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
+            No active trainee sessions currently recorded.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px]">
+                  <th className="py-2.5 px-3">Trainee / User</th>
+                  <th className="py-2.5 px-3">Role</th>
+                  <th className="py-2.5 px-3">Airline</th>
+                  <th className="py-2.5 px-3">Logged In At</th>
+                  <th className="py-2.5 px-3">Session Expiry</th>
+                  <th className="py-2.5 px-3 text-right">Session Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                {active_sessions.map((sess: any) => {
+                  const isRevoking = sessionActionLoading === sess.session_id;
+                  return (
+                    <tr key={sess.session_id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                          {sess.full_name}
+                        </div>
+                        <div className="text-slate-400 text-[11px] font-mono">{sess.email}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            sess.role === "ADMIN"
+                              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                              : sess.role === "MANAGER"
+                              ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
+                              : "bg-sky-500/15 text-sky-400 border border-sky-500/30"
+                          }`}
+                        >
+                          {sess.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">{sess.airline || "Global Aviation"}</td>
+                      <td className="py-3 px-3 text-slate-400">
+                        {sess.logged_in_at ? new Date(sess.logged_in_at).toLocaleString() : "Recently"}
+                      </td>
+                      <td className="py-3 px-3 text-slate-500 text-[11px]">
+                        {sess.expires_at ? new Date(sess.expires_at).toLocaleDateString() : "Valid"}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          type="button"
+                          disabled={isRevoking}
+                          onClick={() => handleRevokeSession(sess.session_id)}
+                          className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-rose-500/40 text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 transition-all disabled:opacity-40"
+                          title="Force sign-out this session"
+                        >
+                          {isRevoking ? "Signing out..." : "Revoke Session"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── 0B. TRAINEE & MEMBER ROLES (PROMOTE MEMBERS TO MANAGERS) ── */}
+      <div className="glass-card p-6 rounded-3xl border border-slate-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Users className="w-4 h-4 text-sky-400" />
+              Member Governance & Role Management ({users.length})
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Promote members to Managers (ground instructors/content curators) or adjust platform privileges.
+            </p>
+          </div>
+          {roleSuccessMsg && (
+            <span className="text-xs text-emerald-400 flex items-center gap-1 font-semibold animate-fade-in bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/30">
+              <Check className="w-3.5 h-3.5" /> {roleSuccessMsg}
+            </span>
+          )}
+        </div>
+
+        {users.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center text-xs text-slate-500">
+            No registered users found.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px]">
+                  <th className="py-2.5 px-3">Trainee / Member</th>
+                  <th className="py-2.5 px-3">Airline / Fleet</th>
+                  <th className="py-2.5 px-3">Current Role</th>
+                  <th className="py-2.5 px-3">Joined</th>
+                  <th className="py-2.5 px-3 text-right">Role Controls</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                {users.map((u: any) => {
+                  const isBusy = roleActionLoading === u.id;
+                  return (
+                    <tr key={u.id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white">{u.full_name}</div>
+                        <div className="text-slate-400 text-[11px] font-mono">{u.email}</div>
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">
+                        <div>{u.airline || "General Fleet"}</div>
+                        {u.is_suspended === 1 && (
+                          <span className="text-[10px] text-rose-400 font-bold">Suspended</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            u.role === "ADMIN"
+                              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                              : u.role === "MANAGER"
+                              ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
+                              : "bg-slate-800 text-slate-300 border border-slate-700"
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-400 text-[11px]">
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {u.role === "MEMBER" && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleUpdateRole(u.id, "MANAGER")}
+                              className="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 transition-all flex items-center gap-1 shadow-sm disabled:opacity-40"
+                              title="Promote Member to Manager role"
+                            >
+                              <Sparkles className="w-3 h-3 text-indigo-400" />
+                              <span>{isBusy ? "Updating..." : "Promote to Manager"}</span>
+                            </button>
+                          )}
+
+                          {u.role === "MANAGER" && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleUpdateRole(u.id, "MEMBER")}
+                              className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all disabled:opacity-40"
+                              title="Demote Manager to Member role"
+                            >
+                              <span>{isBusy ? "Updating..." : "Demote to Member"}</span>
+                            </button>
+                          )}
+
+                          <select
+                            value={u.role}
+                            disabled={isBusy}
+                            onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500"
+                            title="Set role directly"
+                          >
+                            <option value="MEMBER">Member</option>
+                            <option value="MANAGER">Manager</option>
+                            <option value="ADMIN">Admin</option>
+                          </select>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── 1. EXAM MANAGEMENT SECTION (WITH PERMANENT DELETE) ── */}

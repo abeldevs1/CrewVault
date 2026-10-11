@@ -45,14 +45,15 @@ export async function GET(
       );
     }
 
-    // Fetch members
+    // Fetch members (hide administrators from regular trainees)
+    const memberRoleFilter = !isAdmin ? "AND u.role != 'ADMIN'" : "";
     const { results: members } = await db
       .prepare(
         `SELECT gm.id as membership_id, gm.role, gm.joined_at,
                 u.id as user_id, u.full_name, u.email, u.airline, u.role as platform_role
          FROM group_memberships gm
          JOIN users u ON gm.user_id = u.id
-         WHERE gm.group_id = ?
+         WHERE gm.group_id = ? ${memberRoleFilter}
          ORDER BY gm.joined_at ASC`
       )
       .bind(groupId)

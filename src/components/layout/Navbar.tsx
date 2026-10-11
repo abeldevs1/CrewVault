@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plane, Search, Bell, LogOut, User as UserIcon, Shield, Sparkles } from "lucide-react";
+import { Plane, Search, Bell, LogOut, User as UserIcon, Shield, Sparkles, Brain, Menu, X, Trophy, Award, BookOpen, GraduationCap, Users } from "lucide-react";
 import { User } from "@/types";
 import { RoleBadge } from "./RoleBadge";
 
@@ -16,6 +16,7 @@ export function Navbar({ user }: NavbarProps) {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -143,6 +144,15 @@ export function Navbar({ user }: NavbarProps) {
                       My Dashboard
                     </Link>
 
+                    <Link
+                      href="/recall"
+                      onClick={() => setShowDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs text-indigo-300 hover:bg-indigo-500/10 hover:text-indigo-400 transition-colors"
+                    >
+                      <Brain className="w-4 h-4 text-indigo-400" />
+                      Recall Studio (TypeToMemorize)
+                    </Link>
+
                     {user.role === "ADMIN" && (
                       <Link
                         href="/admin"
@@ -164,6 +174,16 @@ export function Navbar({ user }: NavbarProps) {
                   </div>
                 )}
               </div>
+
+              {/* Mobile Menu Hamburger Button */}
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="md:hidden p-2 text-slate-300 hover:text-blue-400 hover:bg-slate-800/50 rounded-xl transition-colors ml-1"
+                aria-label="Toggle mobile menu"
+              >
+                {showMobileMenu ? <X className="w-5 h-5 text-blue-400" /> : <Menu className="w-5 h-5" />}
+              </button>
             </>
           ) : (
             <div className="flex items-center gap-3">
@@ -183,6 +203,70 @@ export function Navbar({ user }: NavbarProps) {
           )}
         </div>
       </div>
+
+      {/* Mobile Drawer Dropdown Menu */}
+      {showMobileMenu && user && (
+        <div className="md:hidden border-t border-slate-800/80 mt-3 pt-3 pb-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-150">
+          <Link
+            href="/recall"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center justify-between p-3 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 text-xs font-bold"
+          >
+            <div className="flex items-center gap-2.5">
+              <Brain className="w-4 h-4 text-indigo-400" />
+              <span>Recall Studio (TypeToMemorize)</span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-[10px] uppercase font-bold text-indigo-300">
+              Active Recall
+            </span>
+          </Link>
+
+          <Link
+            href="/school-final"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-slate-900 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>School Final Hub</span>
+          </Link>
+
+          <Link
+            href="/curricula"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-slate-900 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <Award className="w-4 h-4 text-blue-400" />
+            <span>Curricula Pathways</span>
+          </Link>
+
+          <Link
+            href="/materials"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-slate-900 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <BookOpen className="w-4 h-4 text-sky-400" />
+            <span>Study Materials Vault</span>
+          </Link>
+
+          <Link
+            href="/exams"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-slate-900 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <GraduationCap className="w-4 h-4 text-emerald-400" />
+            <span>Examination Hub</span>
+          </Link>
+
+          <Link
+            href="/discussions"
+            onClick={() => setShowMobileMenu(false)}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-slate-900 text-slate-300 text-xs font-medium transition-colors"
+          >
+            <Users className="w-4 h-4 text-purple-400" />
+            <span>Study Groups & Chat</span>
+          </Link>
+        </div>
+      )}
     </header>
   );
 }

@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       }
     } else {
       // Process each file in the user's specified sequence and concatenate markdown/text
-      const mdSections: string[] = [`# ${title}\n\n*(Multi-page bundle containing ${allFiles.length} ordered files)*\n`];
+      const mdSections: string[] = [`# ${title}\n`];
       const textSections: string[] = [];
       const aggregatedQuestions: any[] = [];
       let totalWords = 0;
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
         const f = allFiles[i];
         const buf = await f.arrayBuffer();
         const p = await processUploadedFile(buf, f.name, f.type);
-        mdSections.push(`## Section ${i + 1}: ${f.name.replace(/\.[^/.]+$/, "")}\n\n${p.extracted_markdown}`);
+        mdSections.push(`## ${f.name.replace(/\.[^/.]+$/, "")}\n\n${p.extracted_markdown}`);
         textSections.push(p.extracted_text);
         if (p.detected_questions && p.detected_questions.length > 0) {
           aggregatedQuestions.push(...p.detected_questions);

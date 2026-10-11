@@ -45,7 +45,7 @@ export default async function RootLayout({
         <Navbar user={user} />
         <div className="flex flex-1 w-full">
           <Sidebar user={user} />
-          <main className="flex-1 min-w-0 p-3 md:p-5 lg:p-7 xl:p-9 overflow-y-auto animate-fade-in">
+          <main className="flex-1 min-w-0 p-3 md:p-5 lg:p-7 xl:p-9 pb-28 lg:pb-8 overflow-y-auto animate-fade-in">
             <div className="max-w-[1600px] mx-auto">
               {children}
             </div>
