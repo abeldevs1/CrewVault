@@ -6,21 +6,35 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate:local": "XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0001_initial_schema.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0002_fts5_triggers.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0003_crewvault_2_upgrade.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0004_curricula_and_settings.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0006_school_final_category.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0007_exam_deletion_and_publishing.sql -y && XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs npx wrangler d1 execute crew-vault-db --local --file=migrations/0008_group_discussions.sql -y",
+    "db:seed:local": "XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs tsx scripts/seed-local.ts",
+    "test": "XDG_CONFIG_HOME=$(pwd)/.config WRANGLER_LOG_PATH=$(pwd)/.wrangler/logs tsx tests/run_all_tests.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.28.0",
+    "@opennextjs/cloudflare": "^1.20.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.53.0",
+    "mammoth": "^1.13.0",
     "next": "16.4.0",
+    "pdf-parse": "^2.4.5",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "wrangler": "^4.148.0"
   }
 }
